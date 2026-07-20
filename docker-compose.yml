@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dq
+      POSTGRES_USER: dq
+      POSTGRES_PASSWORD: dq
+    ports:
+      - "5432:5432"
+    volumes:
+      - dq_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dq -d dq"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  source-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: source
+      POSTGRES_USER: source_owner
+      POSTGRES_PASSWORD: source_owner
+    ports:
+      - "15432:5432"
+    volumes:
+      - source_postgres:/var/lib/postgresql/data
+      - ./demo-source/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U source_owner -d source"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  demo-generator:
+    build:
+      context: ./demo-source
+      dockerfile: generator/Dockerfile
+    profiles: ["tools"]
+    environment:
+      DEMO_DATABASE_URL: postgresql://source_owner:source_owner@source-postgres:5432/source
+    depends_on:
+      source-postgres:
+        condition: service_healthy
+
+  demo-scenario:
+    build:
+      context: ./demo-source
+      dockerfile: scenario/Dockerfile
+    profiles: ["tools"]
+    environment:
+      API_BASE_URL: http://backend:8000/api/v1
+      ADMIN_TOKEN: change-me
+      SOURCE_DATABASE_URL: postgresql://source_owner:source_owner@source-postgres:5432/source
+    depends_on:
+      backend:
+        condition: service_healthy
+      source-postgres:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    env_file: .env.example
+    environment:
+      DATABASE_URL: postgresql+psycopg://dq:dq@postgres:5432/dq
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  scheduler:
+    build: ./backend
+    command: ["python", "-m", "app.scheduler.runner"]
+    env_file: .env.example
+    environment:
+      DATABASE_URL: postgresql+psycopg://dq:dq@postgres:5432/dq
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  dq_postgres:
+  source_postgres:
