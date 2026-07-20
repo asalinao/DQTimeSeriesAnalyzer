@@ -141,12 +141,12 @@ class Anomaly(Base, TimestampMixin):
     relative_deviation: Mapped[float | None] = mapped_column(Float)
     severity: Mapped[str] = mapped_column(String(32), default="warning", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="new", nullable=False)
-    reason: Mapped[str] = mapped_column(String(255), default="forecast_bounds", nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    series: Mapped[Series] = relationship()
-    run: Mapped[Run] = relationship()
     point: Mapped[SeriesPoint] = relationship(back_populates="anomaly")
+    run: Mapped[Run] = relationship()
+    series: Mapped[Series] = relationship()
 
 
 class Notification(Base, TimestampMixin):
@@ -159,4 +159,3 @@ class Notification(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text)
-

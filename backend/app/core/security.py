@@ -8,15 +8,13 @@ from app.core.config import get_settings
 
 
 def _fernet_key(raw: str) -> bytes:
-    value = raw.encode("utf-8")
     try:
-        decoded = base64.urlsafe_b64decode(value)
+        decoded = base64.urlsafe_b64decode(raw.encode("utf-8"))
         if len(decoded) == 32:
-            return value
+            return raw.encode("utf-8")
     except Exception:
         pass
-    digest = hashlib.sha256(value).digest()
-    return base64.urlsafe_b64encode(digest)
+    return base64.urlsafe_b64encode(hashlib.sha256(raw.encode("utf-8")).digest())
 
 
 def encrypt_secret(secret: str) -> str:

@@ -4,26 +4,20 @@ from sqlalchemy.orm import Session
 from app.core.security import require_admin
 from app.db.session import get_db
 from app.schemas.api import ConnectionCreate, ConnectionRead, ConnectionUpdate
-from app.services.connections import (
-    create_connection,
-    delete_connection,
-    get_connection,
-    list_connections,
-    test_and_store,
-    update_connection,
-)
+from app.services.connections import create_connection, delete_connection, get_connection, list_connections, test_and_store, update_connection
+
 
 router = APIRouter(dependencies=[Depends(require_admin)])
-
-
-@router.post("", response_model=ConnectionRead)
-def create(payload: ConnectionCreate, db: Session = Depends(get_db)):
-    return create_connection(db, payload)
 
 
 @router.get("", response_model=list[ConnectionRead])
 def list_all(db: Session = Depends(get_db)):
     return list_connections(db)
+
+
+@router.post("", response_model=ConnectionRead)
+def create(payload: ConnectionCreate, db: Session = Depends(get_db)):
+    return create_connection(db, payload)
 
 
 @router.get("/{connection_id}", response_model=ConnectionRead)

@@ -1,10 +1,8 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from statistics import mean, median, pstdev
 
 
-@dataclass
+@dataclass(frozen=True)
 class Forecast:
     predicted: float | None
     lower: float | None
@@ -14,79 +12,73 @@ class Forecast:
     details: dict
 
 
-def _clean(values: list[float | None]) -> list[float]:
-    return [float(v) for v in values if v is not None]
+def _values(history: list[float | None]) -> list[float]:
+    return [float(value) for value in history if value is not None]
 
 
-def rolling_statistics(values: list[float | None], config: dict, min_points: int) -> Forecast:
-    valid = _clean(values)
-    window = int(config.get("window", min(30, max(len(valid), 1))))
-    k = float(config.get("k", 3.0))
-    min_std = float(config.get("min_std", 0.000001))
-    train = valid[-window:]
+def rolling(history: list[float | None], config: dict, min_points: int) -> Forecast:
+    values = _values(history)
+    window = int(config.get("window", 30))
+    train = values[-window:]
     if len(train) < min_points:
         return Forecast(None, None, None, None, "rolling:v1", {"training_points": len(train)})
+    k = float(config.get("k", 3.0))
+    std = max(pstdev(train), float(config.get("min_std", 0.000001)))
     avg = mean(train)
-    std = max(pstdev(train), min_std)
     return Forecast(avg, avg - k * std, avg + k * std, None, "rolling:v1", {"training_points": len(train), "std": std, "k": k})
 
 
-def robust_z_score(values: list[float | None], config: dict, min_points: int) -> Forecast:
-    valid = _clean(values)
-    window = int(config.get("window", min(30, max(len(valid), 1))))
-    threshold = float(config.get("threshold", 3.5))
-    train = valid[-window:]
+def robust_z(history: list[float | None], config: dict, min_points: int) -> Forecast:
+    values = _values(history)
+    window = int(config.get("window", 30))
+    train = values[-window:]
     if len(train) < min_points:
         return Forecast(None, None, None, None, "robust_z:v1", {"training_points": len(train)})
-    med = median(train)
-    deviations = [abs(v - med) for v in train]
-    mad = max(median(deviations), 0.000001)
-    spread = threshold * 1.4826 * mad
-    return Forecast(med, med - spread, med + spread, None, "robust_z:v1", {"training_points": len(train), "mad": mad})
+    center = median(train)
+    mad = max(median(abs(value - center) for value in train), 0.000001)
+    spread = float(config.get("threshold", 3.5)) * 1.4826 * mad
+    return Forecast(center, center - spread, center + spread, None, "robust_z:v1", {"training_points": len(train), "mad": mad})
 
 
-def exponential_smoothing(values: list[float | None], config: dict, min_points: int) -> Forecast:
-    valid = _clean(values)
-    if len(valid) < min_points:
-        return Forecast(None, None, None, None, "exp_smoothing:v1", {"training_points": len(valid)})
+def exp_smoothing(history: list[float | None], config: dict, min_points: int) -> Forecast:
+    values = _values(history)
+    if len(values) < min_points:
+        return Forecast(None, None, None, None, "exp_smoothing:v1", {"training_points": len(values)})
     alpha = float(config.get("alpha", 0.35))
-    smoothed = valid[0]
+    smoothed = values[0]
     residuals: list[float] = []
-    for value in valid[1:]:
+    for value in values[1:]:
         residuals.append(value - smoothed)
         smoothed = alpha * value + (1 - alpha) * smoothed
     spread = float(config.get("k", 3.0)) * max(pstdev(residuals) if residuals else 0.0, 0.000001)
-    return Forecast(smoothed, smoothed - spread, smoothed + spread, None, "exp_smoothing:v1", {"training_points": len(valid), "alpha": alpha})
+    return Forecast(smoothed, smoothed - spread, smoothed + spread, None, "exp_smoothing:v1", {"training_points": len(values), "alpha": alpha})
 
 
-def seasonal_naive(values: list[float | None], config: dict, min_points: int) -> Forecast:
-    valid = _clean(values)
+def seasonal_naive(history: list[float | None], config: dict, min_points: int) -> Forecast:
+    values = _values(history)
     season_length = int(config.get("season_length", 24))
     required = max(min_points, season_length * 2)
-    if len(valid) < required:
-        return Forecast(None, None, None, None, "seasonal_naive:v1", {"training_points": len(valid), "required": required})
-    predicted = valid[-season_length]
-    tolerance = float(config.get("tolerance", 0.2))
-    spread = max(abs(predicted) * tolerance, float(config.get("min_spread", 0.000001)))
-    return Forecast(predicted, predicted - spread, predicted + spread, None, "seasonal_naive:v1", {"training_points": len(valid), "season_length": season_length})
+    if len(values) < required:
+        return Forecast(None, None, None, None, "seasonal_naive:v1", {"training_points": len(values), "required": required})
+    predicted = values[-season_length]
+    spread = max(abs(predicted) * float(config.get("tolerance", 0.2)), float(config.get("min_spread", 0.000001)))
+    return Forecast(predicted, predicted - spread, predicted + spread, None, "seasonal_naive:v1", {"training_points": len(values), "season_length": season_length})
 
 
-def forecast_next(values: list[float | None], config: dict, min_points: int) -> Forecast:
+def forecast_next(history: list[float | None], config: dict, min_points: int) -> Forecast:
     model = config.get("model", "rolling")
     if model == "robust_z":
-        return robust_z_score(values, config, min_points)
+        return robust_z(history, config, min_points)
     if model == "exp_smoothing":
-        return exponential_smoothing(values, config, min_points)
+        return exp_smoothing(history, config, min_points)
     if model == "seasonal_naive":
-        return seasonal_naive(values, config, min_points)
-    return rolling_statistics(values, config, min_points)
+        return seasonal_naive(history, config, min_points)
+    return rolling(history, config, min_points)
 
 
 def compare(actual: float | None, forecast: Forecast, rules: dict | None = None) -> tuple[bool, str | None, str, float | None, float | None]:
     if actual is None:
-        if rules and rules.get("forbid_null"):
-            return True, "forbid_null", "critical", None, None
-        return False, None, "info", None, None
+        return (True, "forbid_null", "critical", None, None) if rules and rules.get("forbid_null") else (False, None, "info", None, None)
 
     if rules:
         min_value = rules.get("min_value")
@@ -98,10 +90,11 @@ def compare(actual: float | None, forecast: Forecast, rules: dict | None = None)
 
     if forecast.lower is None or forecast.upper is None:
         return False, None, "info", None, None
-    if actual < forecast.lower or actual > forecast.upper:
-        predicted = forecast.predicted if forecast.predicted is not None else (forecast.lower + forecast.upper) / 2
-        absolute = abs(actual - predicted)
-        relative = absolute / abs(predicted) if predicted else None
-        severity = "critical" if relative is not None and relative >= 0.5 else "warning"
-        return True, "forecast_bounds", severity, absolute, relative
-    return False, None, "info", None, None
+    if forecast.lower <= actual <= forecast.upper:
+        return False, None, "info", None, None
+
+    predicted = forecast.predicted if forecast.predicted is not None else (forecast.lower + forecast.upper) / 2
+    absolute = abs(actual - predicted)
+    relative = absolute / abs(predicted) if predicted else None
+    severity = "critical" if relative is not None and relative >= 0.5 else "warning"
+    return True, "forecast_bounds", severity, absolute, relative

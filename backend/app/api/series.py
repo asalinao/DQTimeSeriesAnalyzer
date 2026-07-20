@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models import Series, SeriesPoint
 from app.schemas.api import SeriesPointRead, SeriesRead
 
+
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 
@@ -29,12 +30,12 @@ def get_points(
     resolution: str | None = None,
     db: Session = Depends(get_db),
 ):
-    if not db.get(Series, series_id):
+    if db.get(Series, series_id) is None:
         raise HTTPException(status_code=404, detail="Временной ряд не найден")
     max_limit = 2000 if resolution == "overview" else 5000
     stmt = select(SeriesPoint).where(SeriesPoint.series_id == series_id)
-    if from_:
+    if from_ is not None:
         stmt = stmt.where(SeriesPoint.timestamp >= from_)
-    if to:
+    if to is not None:
         stmt = stmt.where(SeriesPoint.timestamp <= to)
     return list(db.scalars(stmt.order_by(SeriesPoint.timestamp.desc()).limit(min(max(limit, 1), max_limit))))

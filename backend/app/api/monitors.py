@@ -7,17 +7,18 @@ from app.schemas.api import MonitorCreate, MonitorRead, MonitorUpdate, RunRead
 from app.services.monitors import create_monitor, delete_monitor, get_monitor, list_monitors, set_active, update_monitor
 from app.services.runner import execute_monitor
 
+
 router = APIRouter(dependencies=[Depends(require_admin)])
-
-
-@router.post("", response_model=MonitorRead)
-def create(payload: MonitorCreate, db: Session = Depends(get_db)):
-    return create_monitor(db, payload)
 
 
 @router.get("", response_model=list[MonitorRead])
 def list_all(db: Session = Depends(get_db)):
     return list_monitors(db)
+
+
+@router.post("", response_model=MonitorRead)
+def create(payload: MonitorCreate, db: Session = Depends(get_db)):
+    return create_monitor(db, payload)
 
 
 @router.get("/{monitor_id}", response_model=MonitorRead)

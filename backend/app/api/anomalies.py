@@ -8,6 +8,7 @@ from app.models import Anomaly
 from app.models.entities import utcnow
 from app.schemas.api import AnomalyRead, AnomalyStatusUpdate
 
+
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 
@@ -18,13 +19,13 @@ def list_all(status: str | None = None, severity: str | None = None, limit: int 
         stmt = stmt.where(Anomaly.status == status)
     if severity:
         stmt = stmt.where(Anomaly.severity == severity)
-    return list(db.scalars(stmt.order_by(Anomaly.created_at.desc()).limit(min(limit, 500))))
+    return list(db.scalars(stmt.order_by(Anomaly.created_at.desc()).limit(min(max(limit, 1), 500))))
 
 
 @router.get("/{anomaly_id}", response_model=AnomalyRead)
 def get_one(anomaly_id: str, db: Session = Depends(get_db)):
     anomaly = db.get(Anomaly, anomaly_id)
-    if not anomaly:
+    if anomaly is None:
         raise HTTPException(status_code=404, detail="Аномалия не найдена")
     return anomaly
 
@@ -32,11 +33,10 @@ def get_one(anomaly_id: str, db: Session = Depends(get_db)):
 @router.put("/{anomaly_id}/status", response_model=AnomalyRead)
 def update_status(anomaly_id: str, payload: AnomalyStatusUpdate, db: Session = Depends(get_db)):
     anomaly = db.get(Anomaly, anomaly_id)
-    if not anomaly:
+    if anomaly is None:
         raise HTTPException(status_code=404, detail="Аномалия не найдена")
     anomaly.status = payload.status
-    if payload.status == "closed":
-        anomaly.closed_at = utcnow()
+    anomaly.closed_at = utcnow() if payload.status == "closed" else None
     db.commit()
     db.refresh(anomaly)
     return anomaly

@@ -2,17 +2,26 @@
 
 Дата: 2026-07-20
 
+## Что переписано
+
+Проект переписан как одна актуальная MVP-реализация без альтернативных режимов и временных compatibility-слоев.
+
+- Backend: заново переписаны `main`, API routers, DB bootstrap, модели, Pydantic-схемы, services, forecasting, SQL builder, source PostgreSQL client, webhook notifications и scheduler.
+- Frontend: root entrypoint очищен до монтирования React, приложение вынесено в `frontend/src/App.tsx`; текущие вкладки и пользовательские сценарии сохранены.
+- Demo tools: заново переписаны общий генератор синтетических заказов, CLI генератора и E2E demo-сценарий.
+- Docker Compose и Dockerfile сохранили тот же пользовательский запуск: `docker compose up -d`.
+
 ## Актуальное MVP-поведение
 
-Используемые страницы UI:
+Страницы UI:
 
-- Dashboard: метрики состояния, последние запуски, критические события.
+- Dashboard: агрегаты состояния, последние запуски, критические события.
 - Подключения: создание PostgreSQL-подключения, проверка подключения, список.
-- Мониторы: создание, редактирование, ручной запуск, удаление, включение расписания через `is_active`.
-- Временные ряды: выбор монитора и ряда, график факта, аномалий, tooltip, навигация по периоду.
-- Аномалии: список найденных аномалий.
+- Мониторы: создание, редактирование, ручной запуск, удаление, настройка расписания.
+- Временные ряды: выбор монитора и ряда, факт, прогноз, expected range, аномалии, tooltip, brush-навигация.
+- Аномалии: минималистичный список событий с фактом, прогнозом, диапазоном и отклонением.
 
-API, вызываемые frontend:
+API, которые использует frontend:
 
 - `GET /api/v1/dashboard`
 - `GET /api/v1/connections`
@@ -29,10 +38,10 @@ API, вызываемые frontend:
 
 Фоновые задачи:
 
-- `scheduler` раз в минуту ищет активные due-мониторы и запускает `execute_monitor`.
-- Отдельного worker/queue в текущем MVP нет.
+- `scheduler` раз в минуту ищет активные мониторы, у которых наступило расписание, и запускает `execute_monitor`.
+- Redis, queue и отдельный worker не используются.
 
-Актуальные модели БД:
+Модели БД текущего MVP:
 
 - `connections`
 - `monitors`
@@ -42,89 +51,54 @@ API, вызываемые frontend:
 - `anomalies`
 - `notifications`
 
-## Что удалено
+## Что удалено или не возвращено
 
-- Удален дублирующий compose-сервис `worker` и пакет `backend/app/workers`.
-- Удален пустой слой `backend/app/repositories`.
-- Удалены модели `User`, `AuditLog`, `AnomalyComment`.
-- Удалены поля `Run.is_test` и `Series.model_state`.
-- Удалены endpoints:
-  - `GET /api/v1/runs`
-  - `GET /api/v1/runs/{id}`
-  - `POST /api/v1/runs/{id}/retry`
-  - `GET /api/v1/series/{id}`
-  - `PUT /api/v1/series/{id}/model`
-  - `POST /api/v1/series/{id}/reset-model`
-  - `POST /api/v1/anomalies/{id}/comments`
-  - metadata browsing endpoints подключений: schemas/tables/columns.
-- Удалены неиспользуемые API-схемы `ErrorEnvelope`, `ColumnInfo`, `SeriesWithPoints`, `AnomalyCommentCreate`, `NotificationRead`.
-- Удалено устаревшее ТЗ `data_quality_mvp_tz.md`, потому что оно содержало старые `/runs`, worker/queue и SQL-mode требования.
-- Удалены generated-файлы `backend/dq_time_series_backend.egg-info/*`.
-- Удалены неиспользуемые CSS-классы старых layout-версий.
+- Пользовательский SQL-режим мониторинга.
+- Redis/worker/queue архитектура.
+- Старые `/runs` endpoints, retry-run, comments, per-series model edit/reset.
+- Модели пользователей, audit log, comments и промежуточные поля, не используемые MVP.
+- Временные feature flags и compatibility-код для старых сценариев.
+- Случайная монолитность frontend entrypoint.
 
-## Что переписано
+## Что упрощено
 
-- `backend/app/main.py`: переход с deprecated startup event на lifespan, исправлены нечитаемые сообщения ошибок.
-- `backend/app/services/runner.py`: сохранена логика запуска монитора, удален retry-хвост, исправлены сообщения ошибок.
-- `backend/app/services/source_postgres.py`: оставлены только test/checkpoint/aggregate функции текущего MVP.
-- `backend/app/services/connections.py` и `backend/app/services/monitors.py`: очищены сообщения ошибок и выделена `_anomaly_ids_for_monitor`.
-- `frontend/src/main.tsx`: разделен на сценарный entrypoint и вынесенные модули.
-- Добавлены:
-  - `frontend/src/appConfig.ts`
-  - `frontend/src/appUtils.ts`
-  - `frontend/src/components.tsx`
-  - `demo-source/common/synthetic_orders.py`
-- `demo-generator` и `demo-scenario` теперь используют одну общую реализацию синтетических заказов.
-- `backend/migrations/versions/0001_initial.sql` заменен на актуальный baseline текущей MVP-схемы.
-- README и docs переписаны под текущую архитектуру.
-
-## Устраненные костыли
-
-- Убран старый `mode: auto` из demo-scenario.
-- Убрана runtime-env `VITE_API_BASE_URL` у nginx-контейнера; теперь URL явно передается как build arg.
-- Убран fake migration-файл без схемы.
-- Убраны settings, которые не читались приложением: `APP_ENV`, `APP_SECRET_KEY`, `DEFAULT_QUERY_TIMEOUT_SECONDS`, `MAX_CONCURRENT_RUNS`, `LOG_LEVEL`.
+- `execute_monitor` теперь имеет один линейный поток: checkpoint -> aggregate SQL -> time-series points -> anomaly -> notification.
+- SQL builder использует явный whitelist метрик и безопасное quoting/валидацию identifiers.
+- CRUD connections/monitors вынесен в понятные services без лишних абстракций.
+- Forecasting-модели оставлены только как чистые функции.
+- Demo-scenario стал прямым E2E flow без дублирующихся helper-веток.
 
 ## Зависимости
 
-- Runtime-зависимости frontend оставлены только для приложения: `react`, `react-dom`, `lucide-react`, `recharts`.
-- `vite`, `typescript`, `@vitejs/plugin-react`, `@types/*` перенесены в `devDependencies`.
-- Backend-зависимости не удалялись: все текущие зависимости используются runtime-кодом или тестами.
+Удаления зависимостей не потребовались:
 
-## Новая структура
-
-Ключевые каталоги:
-
-- `backend/app/api` - актуальные API routers.
-- `backend/app/services` - бизнес-логика подключений, мониторов, запуска и SQL-агрегатов.
-- `backend/app/timeseries` - модели прогнозирования.
-- `frontend/src` - React UI, chart и клиент API.
-- `demo-source/common` - общая генерация синтетических заказов.
-- `demo-source/generator` - tool-контейнер генератора.
-- `demo-source/scenario` - tool-контейнер E2E-прогона.
+- Backend runtime-зависимости используются приложением: FastAPI, SQLAlchemy, psycopg, pydantic-settings, cryptography, httpx.
+- Backend dev-зависимости используются проверками: pytest, ruff.
+- Frontend runtime-зависимости используются UI: React, lucide-react, Recharts.
 
 ## Проверки
 
 Выполнено:
 
-- `python -m pytest` в backend: 7 passed.
-- `python -m ruff check .` в backend: passed.
-- `npm run build` через `node:20-alpine` в frontend: passed.
-- `docker compose down -v`: локальные volumes очищены.
-- `docker compose up -d --build`: стек поднялся из чистых БД.
-- `docker compose up -d --remove-orphans`: удален старый orphan-контейнер `worker`.
-- `docker compose build demo-generator demo-scenario`: tool-образы пересобраны после выноса общего генератора.
+- `..\.venv\Scripts\python.exe -m pytest` в `backend`: 7 passed.
+- `..\.venv\Scripts\python.exe -m ruff check .` в `backend`: passed.
+- `.venv\Scripts\python.exe -m py_compile demo-source\common\synthetic_orders.py demo-source\generator\generate_demo_data.py demo-source\scenario\run_monitor_scenario.py`: passed.
+- `docker run --rm -v "D:\DQ Time Series Service\frontend:/app" -w /app node:20-alpine npm run build`: passed.
+- `docker compose up -d --build`: backend, scheduler и frontend собраны и запущены.
+- `docker compose build demo-generator demo-scenario`: tool-образы собраны.
 - `docker compose run --rm demo-scenario --reset-source --history-days 45 --normal-runs 31 --anomaly-mode amount_shift --anomaly-runs 1 --seed 42`: passed.
-- Smoke API/UI:
-  - dashboard: `runs_24h=66`, `open_anomalies=4`;
-  - frontend отдает `index-BuH_EC4Q.js` и `index-BKsFH01c.css`;
-  - последний demo-монитор: `series=9`;
-  - выбранный ряд: `points=33`, `forecast_points=3`;
-  - `GET /api/v1/anomalies/{id}` возвращает открытую critical-аномалию.
+
+Smoke после E2E:
+
+- `GET /api/v1/ready`: `{"status":"ready","database":"ok","scheduler":"inline"}`.
+- Frontend отдает `index-DbZDw5aY.js` и `index-oFPF2Vzo.css`.
+- Последний demo-монитор: `Auto synthetic orders 20260720131307`.
+- Рядов у последнего монитора: `9`.
+- Проверенный ряд: `status.distinct_count`, точек `33`, forecast/range-точек `3`.
+- Dashboard: `runs_24h=129`, `open_anomalies=12`.
 
 ## Оставшиеся компромиссы
 
-- Локальный MVP по-прежнему использует `Base.metadata.create_all`, а SQL baseline хранится как документация схемы, не как runtime migration runner.
-- Ручной запуск монитора синхронный; это проще для демо, но не production-подход.
-- `npm audit` сообщает 2 уязвимости в dependency tree. `npm audit fix --force` не применялся, потому что может принести breaking upgrades.
-- Пустые директории, оставшиеся после удаления файлов, не удалось удалить командой из-за политики среды выполнения.
+- Локальный MVP по-прежнему создает схему через `Base.metadata.create_all`; SQL baseline хранится как документация схемы для будущего Alembic.
+- Ручной запуск монитора синхронный, что подходит для локального MVP, но не является production queue-паттерном.
+- Внутренние Docker volumes не очищались при финальной проверке, чтобы не удалять текущие данные пользователя; demo-source таблица была сброшена самим demo-сценарием.

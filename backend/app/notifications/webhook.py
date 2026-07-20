@@ -9,26 +9,29 @@ from sqlalchemy.orm import Session
 from app.models import Notification
 
 
-def _is_private_host(hostname: str) -> bool:
-    try:
-        infos = socket.getaddrinfo(hostname, None)
-    except socket.gaierror:
-        return True
-    for info in infos:
-        address = info[4][0]
-        ip = ipaddress.ip_address(address)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-            return True
-    return False
+BLOCKED_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def validate_webhook_url(url: str) -> bool:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return False
-    if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+    if parsed.hostname in BLOCKED_HOSTS:
         return False
-    return not _is_private_host(parsed.hostname)
+    return not resolves_to_private_address(parsed.hostname)
+
+
+def resolves_to_private_address(hostname: str) -> bool:
+    try:
+        addresses = [item[4][0] for item in socket.getaddrinfo(hostname, None)]
+    except socket.gaierror:
+        return True
+    return any(is_private_address(address) for address in addresses)
+
+
+def is_private_address(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
 
 
 def create_notification(db: Session, event_type: str, payload: dict, anomaly_id: str | None = None) -> Notification:
@@ -55,8 +58,8 @@ def send_webhook(db: Session, notification: Notification, url: str, max_attempts
                 db.flush()
                 return
             except Exception as exc:
-                notification.last_error = str(exc)
                 notification.status = "retrying" if attempt < max_attempts else "failed"
+                notification.last_error = str(exc)
                 db.flush()
                 if attempt < max_attempts:
-                    time.sleep(0.2 * (2 ** (attempt - 1)))
+                    time.sleep(0.2 * 2 ** (attempt - 1))

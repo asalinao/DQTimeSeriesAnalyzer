@@ -8,50 +8,46 @@ from app.models import Monitor, Run
 from app.services.runner import execute_monitor
 
 
-def _schedule_interval(monitor: Monitor) -> timedelta:
+def schedule_interval(monitor: Monitor) -> timedelta:
     try:
         value = int(monitor.schedule_value)
     except ValueError:
-        return timedelta(minutes=5)
-    if monitor.schedule_type == "minutes":
-        return timedelta(minutes=value)
+        value = 5
     if monitor.schedule_type == "hourly":
         return timedelta(hours=value)
     if monitor.schedule_type == "daily":
         return timedelta(days=value)
-    return timedelta(minutes=5)
+    return timedelta(minutes=value)
 
 
-def _latest_run_at(db, monitor_id: str) -> datetime | None:
-    return db.scalar(select(func.max(Run.created_at)).where(Run.monitor_id == monitor_id))
+def as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+def latest_run_at(monitor_id: str) -> datetime | None:
+    with SessionLocal() as db:
+        return db.scalar(select(func.max(Run.created_at)).where(Run.monitor_id == monitor_id))
 
 
-def is_due(db, monitor: Monitor, now: datetime | None = None) -> bool:
+def is_due(monitor: Monitor, now: datetime | None = None) -> bool:
     if not monitor.is_active:
         return False
-    current_time = now or datetime.now(timezone.utc)
-    last_run_at = _latest_run_at(db, monitor.id)
-    if last_run_at is None:
+    last_run = latest_run_at(monitor.id)
+    if last_run is None:
         return True
-    return _as_utc(last_run_at) + _schedule_interval(monitor) <= current_time
+    return as_utc(last_run) + schedule_interval(monitor) <= (now or datetime.now(timezone.utc))
 
 
-def due_monitors() -> list[str]:
+def due_monitor_ids() -> list[str]:
     with SessionLocal() as db:
         monitors = list(db.scalars(select(Monitor).where(Monitor.is_active.is_(True))))
-        return [monitor.id for monitor in monitors if is_due(db, monitor)]
+    return [monitor.id for monitor in monitors if is_due(monitor)]
 
 
 def main() -> None:
     init_db()
     while True:
-        for monitor_id in due_monitors():
+        for monitor_id in due_monitor_ids():
             with SessionLocal() as db:
                 try:
                     execute_monitor(db, monitor_id)

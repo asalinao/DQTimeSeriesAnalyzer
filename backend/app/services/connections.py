@@ -8,6 +8,17 @@ from app.schemas.api import ConnectionCreate, ConnectionUpdate
 from app.services import source_postgres
 
 
+def list_connections(db: Session) -> list[Connection]:
+    return list(db.scalars(select(Connection).order_by(Connection.created_at.desc())))
+
+
+def get_connection(db: Session, connection_id: str) -> Connection:
+    connection = db.get(Connection, connection_id)
+    if connection is None:
+        raise HTTPException(status_code=404, detail="Подключение не найдено")
+    return connection
+
+
 def create_connection(db: Session, payload: ConnectionCreate) -> Connection:
     connection = Connection(
         name=payload.name,
@@ -25,23 +36,12 @@ def create_connection(db: Session, payload: ConnectionCreate) -> Connection:
     return connection
 
 
-def get_connection(db: Session, connection_id: str) -> Connection:
-    connection = db.get(Connection, connection_id)
-    if not connection:
-        raise HTTPException(status_code=404, detail="Подключение не найдено")
-    return connection
-
-
-def list_connections(db: Session) -> list[Connection]:
-    return list(db.scalars(select(Connection).order_by(Connection.created_at.desc())))
-
-
 def update_connection(db: Session, connection_id: str, payload: ConnectionUpdate) -> Connection:
     connection = get_connection(db, connection_id)
     data = payload.model_dump(exclude_unset=True)
     password = data.pop("password", None)
-    for key, value in data.items():
-        setattr(connection, key, value)
+    for field, value in data.items():
+        setattr(connection, field, value)
     if password:
         connection.encrypted_password = encrypt_secret(password)
     db.commit()
@@ -51,8 +51,7 @@ def update_connection(db: Session, connection_id: str, payload: ConnectionUpdate
 
 def delete_connection(db: Session, connection_id: str) -> None:
     connection = get_connection(db, connection_id)
-    active = [monitor for monitor in connection.monitors if monitor.is_active]
-    if active:
+    if any(monitor.is_active for monitor in connection.monitors):
         raise HTTPException(status_code=409, detail="Нельзя удалить подключение с активными мониторами")
     db.delete(connection)
     db.commit()

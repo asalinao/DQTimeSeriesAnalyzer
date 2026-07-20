@@ -15,14 +15,7 @@ from app.db.session import init_db
 def error_response(code: str, message: str, status_code: int, details: dict | None = None) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content={
-            "error": {
-                "code": code,
-                "message": message,
-                "details": details or {},
-                "request_id": str(uuid.uuid4()),
-            }
-        },
+        content={"error": {"code": code, "message": message, "details": details or {}, "request_id": str(uuid.uuid4())}},
     )
 
 
@@ -45,15 +38,15 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    async def handle_http_error(_request: Request, exc: StarletteHTTPException):
         return error_response("HTTP_ERROR", str(exc.detail), exc.status_code)
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    async def handle_validation_error(_request: Request, exc: RequestValidationError):
         return error_response("VALIDATION_ERROR", "Некорректные данные запроса", 422, {"errors": exc.errors()})
 
     @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception):
+    async def handle_unexpected_error(_request: Request, exc: Exception):
         return error_response("INTERNAL_ERROR", "Внутренняя ошибка сервиса", 500, {"reason": str(exc)})
 
     return app

@@ -10,31 +10,28 @@ from app.models import Anomaly, Connection, Monitor, Run
 from app.models.entities import utcnow
 from app.schemas.api import DashboardRead
 
+
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("", response_model=DashboardRead)
 def dashboard(db: Session = Depends(get_db)):
     since = utcnow() - timedelta(hours=24)
-    active_monitors = db.scalar(select(func.count(Monitor.id)).where(Monitor.is_active.is_(True))) or 0
-    runs_24h = db.scalar(select(func.count(Run.id)).where(Run.created_at >= since)) or 0
-    failed_runs_24h = db.scalar(select(func.count(Run.id)).where(Run.created_at >= since, Run.status == "failed")) or 0
-    open_anomalies = db.scalar(select(func.count(Anomaly.id)).where(Anomaly.status != "closed")) or 0
-    critical_anomalies = db.scalar(select(func.count(Anomaly.id)).where(Anomaly.status != "closed", Anomaly.severity == "critical")) or 0
-    latest_runs = list(db.scalars(select(Run).order_by(Run.created_at.desc()).limit(10)))
-    latest_anomalies = list(db.scalars(select(Anomaly).order_by(Anomaly.created_at.desc()).limit(10)))
-    connections = {
-        "total": db.scalar(select(func.count(Connection.id))) or 0,
-        "ok": db.scalar(select(func.count(Connection.id)).where(Connection.last_check_status == "ok")) or 0,
-        "failed": db.scalar(select(func.count(Connection.id)).where(Connection.last_check_status == "failed")) or 0,
-    }
     return DashboardRead(
-        active_monitors=active_monitors,
-        runs_24h=runs_24h,
-        failed_runs_24h=failed_runs_24h,
-        open_anomalies=open_anomalies,
-        critical_anomalies=critical_anomalies,
-        connections=connections,
-        latest_runs=latest_runs,
-        latest_anomalies=latest_anomalies,
+        active_monitors=count(db, select(func.count(Monitor.id)).where(Monitor.is_active.is_(True))),
+        runs_24h=count(db, select(func.count(Run.id)).where(Run.created_at >= since)),
+        failed_runs_24h=count(db, select(func.count(Run.id)).where(Run.created_at >= since, Run.status == "failed")),
+        open_anomalies=count(db, select(func.count(Anomaly.id)).where(Anomaly.status != "closed")),
+        critical_anomalies=count(db, select(func.count(Anomaly.id)).where(Anomaly.status != "closed", Anomaly.severity == "critical")),
+        connections={
+            "total": count(db, select(func.count(Connection.id))),
+            "ok": count(db, select(func.count(Connection.id)).where(Connection.last_check_status == "ok")),
+            "failed": count(db, select(func.count(Connection.id)).where(Connection.last_check_status == "failed")),
+        },
+        latest_runs=list(db.scalars(select(Run).order_by(Run.created_at.desc()).limit(10))),
+        latest_anomalies=list(db.scalars(select(Anomaly).order_by(Anomaly.created_at.desc()).limit(10))),
     )
+
+
+def count(db: Session, stmt) -> int:
+    return int(db.scalar(stmt) or 0)

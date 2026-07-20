@@ -1,28 +1,11 @@
 import type React from "react";
 import { useEffect, useState } from "react";
 
+
 export function StatusPill({ value }: { value: string }) {
   return <span className={`pill ${value}`}>{value}</span>;
 }
 
-export function JsonEditor({ value, onChange }: { value: unknown; onChange: (next: unknown) => void }) {
-  const [text, setText] = useState(JSON.stringify(value, null, 2));
-  useEffect(() => setText(JSON.stringify(value, null, 2)), [value]);
-  return (
-    <textarea
-      value={text}
-      onChange={(event) => {
-        setText(event.target.value);
-        try {
-          onChange(JSON.parse(event.target.value));
-        } catch {
-          // Keep invalid JSON visible until the user fixes it.
-        }
-      }}
-      spellCheck={false}
-    />
-  );
-}
 
 export function Metric({ title, value }: { title: string; value: number }) {
   return (
@@ -32,6 +15,7 @@ export function Metric({ title, value }: { title: string; value: number }) {
     </div>
   );
 }
+
 
 export function FormInput({
   label,
@@ -53,6 +37,31 @@ export function FormInput({
     </label>
   );
 }
+
+
+export function JsonEditor({ value, onChange }: { value: unknown; onChange: (next: unknown) => void }) {
+  const [text, setText] = useState(() => JSON.stringify(value, null, 2));
+
+  useEffect(() => {
+    setText(JSON.stringify(value, null, 2));
+  }, [value]);
+
+  return (
+    <textarea
+      value={text}
+      spellCheck={false}
+      onChange={(event) => {
+        setText(event.target.value);
+        try {
+          onChange(JSON.parse(event.target.value));
+        } catch {
+          // The editor keeps invalid JSON visible until the user fixes it.
+        }
+      }}
+    />
+  );
+}
+
 
 export function Table<T extends { id: string }>({
   rows,

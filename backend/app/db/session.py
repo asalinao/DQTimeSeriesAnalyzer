@@ -10,13 +10,13 @@ class Base(DeclarativeBase):
     pass
 
 
-def _engine_kwargs(url: str) -> dict:
+def engine_kwargs(url: str) -> dict:
     if url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
     return {"pool_pre_ping": True}
 
 
-engine = create_engine(get_settings().database_url, future=True, **_engine_kwargs(get_settings().database_url))
+engine = create_engine(get_settings().database_url, future=True, **engine_kwargs(get_settings().database_url))
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, future=True)
 
 
@@ -27,8 +27,5 @@ def init_db() -> None:
 
 
 def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
+    with SessionLocal() as db:
         yield db
-    finally:
-        db.close()
