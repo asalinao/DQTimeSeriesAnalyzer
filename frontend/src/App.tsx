@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Database, LineChart, Play, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Activity, AlertTriangle, Database, LineChart, Play, Save, ShieldCheck, Trash2, XCircle } from "lucide-react";
 
 import { api, deleteJson, postJson, putJson } from "./api/client";
 import { emptyConnection, emptyMonitor } from "./appConfig";
@@ -18,21 +18,54 @@ export function App() {
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [selectedAnomalyId, setSelectedAnomalyId] = useState<string | null>(null);
+  const [allSeries, setAllSeries] = useState<Series[]>([]);
   const [series, setSeries] = useState<Series[]>([]);
   const [points, setPoints] = useState<SeriesPoint[]>([]);
   const [overviewPoints, setOverviewPoints] = useState<SeriesPoint[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
+  const [chartQuickRange, setChartQuickRange] = useState<ChartRange | null>(null);
   const [selectedMonitor, setSelectedMonitor] = useState("");
   const [selectedSeries, setSelectedSeries] = useState("");
   const [editingMonitorId, setEditingMonitorId] = useState("");
   const [connectionForm, setConnectionForm] = useState(emptyConnection);
   const [monitorForm, setMonitorForm] = useState(emptyMonitor);
+  const [anomalyPeriod, setAnomalyPeriod] = useState("all");
+  const [anomalyMonitor, setAnomalyMonitor] = useState("");
+  const [anomalyMetric, setAnomalyMetric] = useState("");
+  const [anomalySeverity, setAnomalySeverity] = useState("");
 
   const sortedAnomalies = useMemo(
     () => [...anomalies].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()),
     [anomalies],
   );
+  const seriesById = useMemo(() => new Map(allSeries.map((item) => [item.id, item])), [allSeries]);
+  const filteredAnomalies = useMemo(() => {
+    const now = Date.now();
+    const periodStart =
+      anomalyPeriod === "24h"
+        ? now - 24 * 60 * 60 * 1000
+        : anomalyPeriod === "7d"
+          ? now - 7 * 24 * 60 * 60 * 1000
+          : anomalyPeriod === "30d"
+            ? now - 30 * 24 * 60 * 60 * 1000
+            : 0;
+    return sortedAnomalies.filter((anomaly) => {
+      const created = new Date(anomaly.created_at).getTime();
+      const anomalySeries = seriesById.get(anomaly.series_id);
+      return (
+        (!periodStart || created >= periodStart) &&
+        (!anomalyMonitor || anomalySeries?.monitor_id === anomalyMonitor) &&
+        (!anomalyMetric || anomalySeries?.metric_name === anomalyMetric) &&
+        (!anomalySeverity || anomaly.severity === anomalySeverity)
+      );
+    });
+  }, [anomalyMetric, anomalyMonitor, anomalyPeriod, anomalySeverity, seriesById, sortedAnomalies]);
+  const anomalyMetrics = useMemo(
+    () => [...new Set(sortedAnomalies.map((anomaly) => seriesById.get(anomaly.series_id)?.metric_name).filter((metric): metric is string => Boolean(metric)))],
+    [seriesById, sortedAnomalies],
+  );
+  const anomalySeverities = useMemo(() => [...new Set(sortedAnomalies.map((anomaly) => anomaly.severity).filter(Boolean))], [sortedAnomalies]);
   const selectedSeriesEntity = series.find((row) => row.id === selectedSeries) ?? null;
   const seriesEmptyTitle = !selectedMonitor ? "Выберите мониторинг" : series.length === 0 ? "Рядов пока нет" : "Выберите временной ряд";
   const seriesEmptyText = !selectedMonitor
@@ -42,16 +75,18 @@ export function App() {
       : "График откроется после выбора ряда.";
 
   async function refresh() {
-    const [dash, conns, mons, anomalyList] = await Promise.all([
+    const [dash, conns, mons, anomalyList, seriesList] = await Promise.all([
       api<Dashboard>("/dashboard"),
       api<Connection[]>("/connections"),
       api<Monitor[]>("/monitors"),
       api<Anomaly[]>("/anomalies"),
+      api<Series[]>("/series"),
     ]);
     setDashboard(dash);
     setConnections(conns);
     setMonitors(mons);
     setAnomalies(anomalyList);
+    setAllSeries(seriesList);
     if (!monitorForm.connection_id && conns[0]) {
       setMonitorForm((form) => ({ ...form, connection_id: conns[0].id }));
     }
@@ -91,6 +126,7 @@ export function App() {
     setPoints([]);
     setOverviewPoints([]);
     setPointsError("");
+    setChartQuickRange(null);
     if (!monitorId) {
       return;
     }
@@ -159,6 +195,18 @@ export function App() {
     await loadSeries(id);
   }
 
+  function applyQuickRange(days?: number) {
+    if (!selectedSeries || overviewPoints.length === 0) {
+      return;
+    }
+    const sorted = [...overviewPoints].sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
+    const to = new Date(sorted[sorted.length - 1].timestamp).getTime();
+    const from = days ? Math.max(new Date(sorted[0].timestamp).getTime(), to - days * 24 * 60 * 60 * 1000) : new Date(sorted[0].timestamp).getTime();
+    const nextRange: ChartRange = { from, to, preset: days ? "custom" : "all" };
+    setChartQuickRange(nextRange);
+    loadSeriesPoints(selectedSeries, nextRange).catch(() => undefined);
+  }
+
   return (
     <div className="app">
       <aside>
@@ -186,15 +234,16 @@ export function App() {
       <main>
         {tab === "dashboard" && dashboard && (
           <section className="dashboardGrid">
-            <Metric title="Активные мониторинги" value={dashboard.active_monitors} />
-            <Metric title="Запуски за 24 часа" value={dashboard.runs_24h} />
-            <Metric title="Ошибки за 24 часа" value={dashboard.failed_runs_24h} />
-            <Metric title="Открытые аномалии" value={dashboard.open_anomalies} />
+            <Metric title="Активные мониторинги" value={dashboard.active_monitors} icon={<ShieldCheck />} />
+            <Metric title="Запуски за 24 часа" value={dashboard.runs_24h} icon={<Play />} />
+            <Metric title="Ошибки за 24 часа" value={dashboard.failed_runs_24h} icon={<XCircle />} />
+            <Metric title="Открытые аномалии" value={dashboard.open_anomalies} icon={<AlertTriangle />} />
             <div className="panel dashboardRuns">
               <h2>Последние запуски</h2>
               <Table
                 rows={dashboard.latest_runs}
                 columns={["status", "new_rows", "metrics_count", "created_at"]}
+                labels={{ status: "Статус", new_rows: "Новые строки", metrics_count: "Метрики", created_at: "Дата" }}
                 render={(run, key) => (key === "status" ? <StatusPill value={run.status} /> : formatTableValue(run, key))}
               />
             </div>
@@ -226,7 +275,7 @@ export function App() {
                 <FormInput label="Database" value={connectionForm.database} onChange={(database) => setConnectionForm({ ...connectionForm, database })} />
                 <FormInput className="fieldSpan2" label="Username" value={connectionForm.username} onChange={(username) => setConnectionForm({ ...connectionForm, username })} />
                 <FormInput className="fieldSpan2" label="Password" value={connectionForm.password} type="password" onChange={(password) => setConnectionForm({ ...connectionForm, password })} />
-                <button onClick={saveConnection}>
+                <button className="buttonPrimary" onClick={saveConnection}>
                   <Save size={18} /> Сохранить
                 </button>
               </div>
@@ -325,7 +374,7 @@ export function App() {
                 </label>
                 <div className="formActions monitorInlineActions">
                   {editingMonitorId && <button onClick={startCreateMonitor}>Новый мониторинг</button>}
-                  <button onClick={saveMonitor}>
+                  <button className="buttonPrimary" onClick={saveMonitor}>
                     <Save size={18} /> {editingMonitorId ? "Сохранить" : "Создать мониторинг"}
                   </button>
                 </div>
@@ -344,7 +393,7 @@ export function App() {
                   <StatusPill value={monitor.is_active ? "active" : "paused"} />
                   <button onClick={() => startEditMonitor(monitor)}>Править</button>
                   <button onClick={() => runMonitor(monitor.id)}>Запуск</button>
-                  <button onClick={() => deleteMonitor(monitor)}>
+                  <button className="buttonDanger" onClick={() => deleteMonitor(monitor)}>
                     <Trash2 size={16} /> Удалить
                   </button>
                 </div>
@@ -381,6 +430,15 @@ export function App() {
                   ))}
                 </select>
               </label>
+              <div className="seriesControl periodControl">
+                <span aria-hidden="true">Период</span>
+                <div className="periodButtons" aria-label="Быстрый период">
+                  <button onClick={() => applyQuickRange(1)} disabled={!selectedSeries}>24ч</button>
+                  <button onClick={() => applyQuickRange(7)} disabled={!selectedSeries}>7д</button>
+                  <button onClick={() => applyQuickRange(30)} disabled={!selectedSeries}>30д</button>
+                  <button onClick={() => applyQuickRange()} disabled={!selectedSeries}>Всё</button>
+                </div>
+              </div>
             </div>
             {selectedSeriesEntity ? (
               <TimeSeriesChart
@@ -391,6 +449,7 @@ export function App() {
                 loading={pointsLoading}
                 error={pointsError}
                 timeZone={monitors.find((monitor) => monitor.id === selectedMonitor)?.timezone}
+                quickRange={chartQuickRange}
                 onRangeCommit={(range) => selectedSeries && loadSeriesPoints(selectedSeries, range)}
                 onRetry={() => selectedSeries && loadSeriesPoints(selectedSeries)}
                 onOpenAnomaly={(anomalyId) => {
@@ -412,17 +471,55 @@ export function App() {
           <section className="panel anomaliesPanel">
             <div className="sectionHeader">
               <h2>Список аномалий</h2>
-              <span>{sortedAnomalies.length} событий</span>
+              <span>{filteredAnomalies.length} событий</span>
             </div>
-            {sortedAnomalies.length === 0 ? (
+            <div className="anomalyFilters">
+              <label>
+                Период
+                <select value={anomalyPeriod} onChange={(event) => setAnomalyPeriod(event.target.value)}>
+                  <option value="all">Всё время</option>
+                  <option value="24h">24 часа</option>
+                  <option value="7d">7 дней</option>
+                  <option value="30d">30 дней</option>
+                </select>
+              </label>
+              <label>
+                Мониторинг
+                <select value={anomalyMonitor} onChange={(event) => setAnomalyMonitor(event.target.value)}>
+                  <option value="">Все</option>
+                  {monitors.map((monitor) => (
+                    <option key={monitor.id} value={monitor.id}>{monitor.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Метрика
+                <select value={anomalyMetric} onChange={(event) => setAnomalyMetric(event.target.value)}>
+                  <option value="">Все</option>
+                  {anomalyMetrics.map((metric) => (
+                    <option key={metric} value={metric}>{metric}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Критичность
+                <select value={anomalySeverity} onChange={(event) => setAnomalySeverity(event.target.value)}>
+                  <option value="">Все</option>
+                  {anomalySeverities.map((severity) => (
+                    <option key={severity} value={severity}>{severity}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {filteredAnomalies.length === 0 ? (
               <div className="emptyState">Аномалий нет</div>
             ) : (
               <div className="anomalyList">
-                {sortedAnomalies.map((anomaly) => (
+                {filteredAnomalies.map((anomaly) => (
                   <article className={`anomalyItem ${selectedAnomalyId === anomaly.id ? "selected" : ""}`} key={anomaly.id}>
                     <div className="anomalyMain">
                       <div className="anomalyReason">
-                        <strong>{anomaly.reason}</strong>
+                        <strong title={anomaly.reason}>{anomaly.reason}</strong>
                         <span>{formatFullDate(anomaly.created_at, "UTC")}</span>
                       </div>
                       <div className="anomalyBadges">

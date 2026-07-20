@@ -39,6 +39,7 @@ type Props = {
   loading: boolean;
   error?: string;
   timeZone?: string;
+  quickRange?: ChartRange | null;
   onRangeCommit: (range: ChartRange) => void;
   onRetry: () => void;
   onOpenAnomaly: (anomalyId: string) => void;
@@ -52,6 +53,7 @@ export function TimeSeriesChart({
   loading,
   error,
   timeZone,
+  quickRange,
   onRangeCommit,
   onRetry,
   onOpenAnomaly,
@@ -108,6 +110,12 @@ export function TimeSeriesChart({
     return () => window.clearTimeout(timeout);
   }, [onRangeCommit, pendingCommit, storageKey]);
 
+  useEffect(() => {
+    if (quickRange) {
+      setRange(quickRange);
+    }
+  }, [quickRange]);
+
   const visibleRows = useMemo(() => filterRowsByRange(rows, range), [rows, range]);
   const visibleForecast = hasForecast(visibleRows);
   const brushIndexes = useMemo(() => indexesForRange(overviewPoints, range), [overviewPoints, range]);
@@ -155,11 +163,18 @@ export function TimeSeriesChart({
         </div>
       )}
 
+      <div className="chartLegend" aria-label="Легенда графика">
+        <span className="legendItem"><span className="legendSwatch actual" />Факт</span>
+        {visibleForecast && <span className="legendItem"><span className="legendSwatch forecast" />Прогноз</span>}
+        <span className="legendItem"><span className="legendSwatch band" />Доверительный диапазон</span>
+        <span className="legendItem"><span className="legendSwatch anomaly" />Аномалия</span>
+      </div>
+
       <div className="chartFrame">
-        {loading && <div className="chartLoading">Загрузка...</div>}
-        <ResponsiveContainer width="100%" height={390}>
-          <ComposedChart data={visibleRows} margin={{ top: 12, right: 18, bottom: 8, left: 6 }}>
-            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+        {loading && <div className="chartLoading">Обновляем данные графика</div>}
+        <ResponsiveContainer width="100%" height={410}>
+          <ComposedChart data={visibleRows} margin={{ top: 14, right: 20, bottom: 10, left: 8 }}>
+            <CartesianGrid stroke="#edf2f7" vertical={false} />
             <XAxis
               dataKey="x"
               type="number"
@@ -193,15 +208,15 @@ export function TimeSeriesChart({
               dataKey="band"
               type="linear"
               stroke="none"
-              fill="#bfdbfe"
-              fillOpacity={0.35}
+              fill="#dbeafe"
+              fillOpacity={0.48}
               connectNulls={false}
               isAnimationActive={false}
             />
             <Line
               type="linear"
               dataKey="actual"
-              stroke="#0f766e"
+              stroke="#2563eb"
               strokeWidth={2.2}
               dot={(props) => (
                 <ActualDot
@@ -218,7 +233,7 @@ export function TimeSeriesChart({
               <Line
                 type="linear"
                 dataKey="predicted"
-                stroke="#7c3aed"
+                stroke="#64748b"
                 strokeWidth={2}
                 strokeDasharray="6 5"
                 dot={false}
@@ -230,7 +245,7 @@ export function TimeSeriesChart({
             {forecastStart && (
               <ReferenceLine
                 x={forecastStart}
-                stroke="#7c3aed"
+                stroke="#94a3b8"
                 strokeDasharray="4 4"
               />
             )}
@@ -239,14 +254,14 @@ export function TimeSeriesChart({
       </div>
 
       <div className="rangeNavigator">
-        <ResponsiveContainer width="100%" height={92}>
+        <ResponsiveContainer width="100%" height={82}>
           <ComposedChart data={overviewRows} margin={{ top: 4, right: 18, bottom: 0, left: 6 }}>
             <XAxis dataKey="x" hide type="number" domain={["dataMin", "dataMax"]} />
             <YAxis hide domain={["dataMin", "dataMax"]} />
             <Line
               type="linear"
               dataKey="actual"
-              stroke="#0f766e"
+              stroke="#2563eb"
               strokeWidth={1.4}
               dot={false}
               connectNulls={false}
@@ -360,7 +375,7 @@ function ActualDot(props: {
   if (!props.showRegular) {
     return null;
   }
-  return <circle cx={props.cx} cy={props.cy} r={2.5} fill="#ffffff" stroke="#0f766e" strokeWidth={1.4} />;
+  return <circle cx={props.cx} cy={props.cy} r={2.5} fill="#ffffff" stroke="#2563eb" strokeWidth={1.4} />;
 }
 
 function hasRowForecast(row: ChartRow): boolean {
