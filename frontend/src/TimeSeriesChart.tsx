@@ -174,12 +174,15 @@ export function TimeSeriesChart({
         {loading && <div className="chartLoading">Обновляем данные графика</div>}
         <ResponsiveContainer width="100%" height={410}>
           <ComposedChart data={visibleRows} margin={{ top: 14, right: 20, bottom: 10, left: 8 }}>
-            <CartesianGrid stroke="#edf2f7" vertical={false} />
+            <CartesianGrid stroke="#2b354a" vertical={false} />
             <XAxis
               dataKey="x"
               type="number"
               domain={mainXDomain}
               allowDataOverflow
+              axisLine={{ stroke: "#3a465d" }}
+              tickLine={{ stroke: "#3a465d" }}
+              tick={{ fill: "#94a3b8", fontSize: 12 }}
               tickCount={8}
               tickFormatter={(value) => formatTimeTick(Number(value), range, timeZone)}
               minTickGap={28}
@@ -191,6 +194,9 @@ export function TimeSeriesChart({
               domain={domain}
               tickFormatter={(value) => formatMetricValue(Number(value), series.metric_name) ?? ""}
               width={64}
+              axisLine={{ stroke: "#3a465d" }}
+              tickLine={{ stroke: "#3a465d" }}
+              tick={{ fill: "#94a3b8", fontSize: 12 }}
             />
             <Tooltip
               content={(props) => (
@@ -201,22 +207,22 @@ export function TimeSeriesChart({
                   timeZone={timeZone}
                 />
               )}
-              cursor={{ stroke: "#94a3b8", strokeDasharray: "3 3" }}
+              cursor={{ stroke: "#64748b", strokeDasharray: "3 3" }}
               wrapperStyle={{ outline: "none" }}
             />
             <Area
               dataKey="band"
               type="linear"
               stroke="none"
-              fill="#dbeafe"
-              fillOpacity={0.48}
+              fill="#60a5fa"
+              fillOpacity={0.2}
               connectNulls={false}
               isAnimationActive={false}
             />
             <Line
               type="linear"
               dataKey="actual"
-              stroke="#2563eb"
+              stroke="#60a5fa"
               strokeWidth={2.2}
               dot={(props) => (
                 <ActualDot
@@ -233,7 +239,7 @@ export function TimeSeriesChart({
               <Line
                 type="linear"
                 dataKey="predicted"
-                stroke="#64748b"
+                stroke="#cbd5e1"
                 strokeWidth={2}
                 strokeDasharray="6 5"
                 dot={false}
@@ -245,7 +251,7 @@ export function TimeSeriesChart({
             {forecastStart && (
               <ReferenceLine
                 x={forecastStart}
-                stroke="#94a3b8"
+                stroke="#64748b"
                 strokeDasharray="4 4"
               />
             )}
@@ -261,7 +267,7 @@ export function TimeSeriesChart({
             <Line
               type="linear"
               dataKey="actual"
-              stroke="#2563eb"
+              stroke="#60a5fa"
               strokeWidth={1.4}
               dot={false}
               connectNulls={false}
@@ -269,8 +275,11 @@ export function TimeSeriesChart({
             />
             <Brush
               dataKey="x"
-              height={44}
-              travellerWidth={10}
+              y={8}
+              height={58}
+              travellerWidth={8}
+              fill="transparent"
+              stroke="#3a465d"
               startIndex={brushIndexes.startIndex}
               endIndex={brushIndexes.endIndex}
               tickFormatter={() => ""}
@@ -366,7 +375,7 @@ function ActualDot(props: {
         cy={props.cy}
         r={5.5}
         fill="#dc2626"
-        stroke="#ffffff"
+        stroke="#182033"
         strokeWidth={1.8}
         onMouseDown={() => props.onOpenAnomaly(props.payload!.anomalyId!)}
       />
@@ -375,7 +384,7 @@ function ActualDot(props: {
   if (!props.showRegular) {
     return null;
   }
-  return <circle cx={props.cx} cy={props.cy} r={2.5} fill="#ffffff" stroke="#2563eb" strokeWidth={1.4} />;
+  return <circle cx={props.cx} cy={props.cy} r={2.5} fill="#182033" stroke="#60a5fa" strokeWidth={1.4} />;
 }
 
 function hasRowForecast(row: ChartRow): boolean {
