@@ -13,8 +13,7 @@ export type MonitorForm = {
   connection_id: string;
   schema_name: string;
   table_name: string;
-  schedule_type: string;
-  schedule_value: string;
+  schedule_cron: string;
   timezone: string;
   checkpoint_column: string;
   checkpoint_type: string;
@@ -41,8 +40,7 @@ export const emptyMonitor: MonitorForm = {
   connection_id: "",
   schema_name: "public",
   table_name: "demo_orders",
-  schedule_type: "minutes",
-  schedule_value: "5",
+  schedule_cron: "*/5 * * * *",
   timezone: "UTC",
   checkpoint_column: "created_at",
   checkpoint_type: "timestamp",
@@ -57,10 +55,4 @@ export const emptyMonitor: MonitorForm = {
   notification_config: {},
   query_timeout_seconds: 60,
   is_active: false,
-};
-
-export const scheduleTypeLabels: Record<string, string> = {
-  minutes: "минут",
-  hourly: "часов",
-  daily: "дней",
 };

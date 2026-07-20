@@ -55,16 +55,14 @@ def test_create_monitor_run_and_anomaly(client, monkeypatch):
         f"/api/v1/monitors/{monitor['id']}",
         json={
             "name": "Orders quality edited",
-            "schedule_type": "hourly",
-            "schedule_value": "2",
+            "schedule_cron": "0 */2 * * *",
             "timezone": "Europe/Moscow",
             "is_active": True,
             "query_timeout_seconds": 30,
         },
     ).json()
     assert monitor["name"] == "Orders quality edited"
-    assert monitor["schedule_type"] == "hourly"
-    assert monitor["schedule_value"] == "2"
+    assert monitor["schedule_cron"] == "0 */2 * * *"
     assert monitor["timezone"] == "Europe/Moscow"
     assert monitor["is_active"] is True
 
@@ -86,3 +84,32 @@ def test_create_monitor_run_and_anomaly(client, monkeypatch):
     assert client.delete(f"/api/v1/monitors/{monitor['id']}").status_code == 204
     assert client.get(f"/api/v1/monitors/{monitor['id']}").status_code == 404
     assert client.get(f"/api/v1/series?monitor_id={monitor['id']}").json() == []
+
+
+def test_invalid_monitor_cron_is_rejected(client):
+    connection = client.post(
+        "/api/v1/connections",
+        json={
+            "name": "Source",
+            "host": "localhost",
+            "port": 5432,
+            "database": "source",
+            "username": "readonly",
+            "password": "secret",
+        },
+    ).json()
+
+    response = client.post(
+        "/api/v1/monitors",
+        json={
+            "name": "Bad schedule",
+            "connection_id": connection["id"],
+            "schema_name": "public",
+            "table_name": "orders",
+            "checkpoint_column": "created_at",
+            "schedule_cron": "every five minutes",
+            "selected_metrics": {"__table__": ["row_count"]},
+        },
+    )
+
+    assert response.status_code == 422

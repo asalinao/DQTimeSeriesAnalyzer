@@ -5,10 +5,8 @@ from sqlalchemy.orm import Session
 from app.models import Anomaly, Monitor, Notification, Run, Series
 from app.schemas.api import MonitorCreate, MonitorUpdate
 from app.services.connections import get_connection
+from app.services.scheduling import DEFAULT_CRON, validate_cron_expression, validate_timezone
 from app.services.sql_safety import UnsafeSqlError, ensure_identifier
-
-
-SCHEDULE_TYPES = {"minutes", "hourly", "daily"}
 
 
 def list_monitors(db: Session) -> list[Monitor]:
@@ -26,6 +24,8 @@ def create_monitor(db: Session, payload: MonitorCreate) -> Monitor:
     get_connection(db, payload.connection_id)
     validate_monitor_payload(payload)
     data = payload.model_dump(by_alias=False)
+    data["schedule_cron"] = validate_cron_expression(data.get("schedule_cron") or DEFAULT_CRON)
+    data["timezone"] = validate_timezone(data.get("timezone") or "UTC")
     model_config = data.pop("model_config_data")
     monitor = Monitor(**data)
     monitor.model_config = model_config
@@ -41,6 +41,10 @@ def update_monitor(db: Session, monitor_id: str, payload: MonitorUpdate) -> Moni
     data = payload.model_dump(exclude_unset=True, by_alias=False)
     if data.get("connection_id"):
         get_connection(db, data["connection_id"])
+    if "schedule_cron" in data:
+        data["schedule_cron"] = validate_cron_expression(data["schedule_cron"] or DEFAULT_CRON)
+    if "timezone" in data:
+        data["timezone"] = validate_timezone(data["timezone"] or "UTC")
     model_config = data.pop("model_config_data", None)
     if model_config is not None:
         monitor.model_config = model_config
@@ -85,17 +89,10 @@ def validate_monitor_payload(payload: MonitorCreate | MonitorUpdate) -> None:
     except UnsafeSqlError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    schedule_type = data.get("schedule_type")
-    schedule_value = data.get("schedule_value")
-    if schedule_type is not None and schedule_type not in SCHEDULE_TYPES:
-        raise HTTPException(status_code=422, detail="Неподдерживаемый тип расписания")
-    if schedule_value is None:
-        return
     try:
-        parsed = int(schedule_value)
+        if schedule_cron := data.get("schedule_cron"):
+            data["schedule_cron"] = validate_cron_expression(schedule_cron)
+        if timezone := data.get("timezone"):
+            validate_timezone(timezone)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail="Значение расписания должно быть целым числом") from exc
-    if parsed < 1:
-        raise HTTPException(status_code=422, detail="Значение расписания должно быть положительным")
-    if schedule_type == "minutes" and parsed < 5:
-        raise HTTPException(status_code=422, detail="Минимальный интервал расписания: 5 минут")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

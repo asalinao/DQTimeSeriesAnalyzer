@@ -1,4 +1,4 @@
-import { emptyMonitor, scheduleTypeLabels, type MonitorForm } from "./appConfig";
+import { emptyMonitor, type MonitorForm } from "./appConfig";
 import { formatFullDate, formatMetricValue } from "./chartUtils";
 import type { Anomaly, Monitor, SeriesPoint } from "./types/domain";
 
@@ -53,7 +53,7 @@ export function scheduleSummary(monitor: Monitor): string {
   if (!monitor.is_active) {
     return "Расписание выключено";
   }
-  return `Запуск каждые ${monitor.schedule_value} ${scheduleTypeLabels[monitor.schedule_type] ?? "минут"}`;
+  return `Cron: ${monitor.schedule_cron}`;
 }
 
 
@@ -64,8 +64,7 @@ export function monitorToForm(monitor: Monitor): MonitorForm {
     connection_id: monitor.connection_id,
     schema_name: monitor.schema_name,
     table_name: monitor.table_name,
-    schedule_type: monitor.schedule_type,
-    schedule_value: monitor.schedule_value,
+    schedule_cron: monitor.schedule_cron,
     timezone: monitor.timezone,
     checkpoint_column: monitor.checkpoint_column,
     checkpoint_type: monitor.checkpoint_type,

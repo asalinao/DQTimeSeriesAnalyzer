@@ -1,11 +1,11 @@
 # Архитектура MVP
 
-DQ Time Series Service состоит из FastAPI backend, React frontend, внутренней PostgreSQL, отдельной demo/source PostgreSQL и одного scheduler-процесса.
+DQ Time Series Service состоит из FastAPI backend, React frontend, внутренней PostgreSQL, внешнего PostgreSQL-источника и одного scheduler-процесса.
 
 Основной поток:
 
 1. Пользователь создает PostgreSQL-подключение. Пароль шифруется и не возвращается через API.
-2. Пользователь настраивает монитор: источник, checkpoint-колонку, расписание, JSON метрик, JSON модели, static rules и уведомления.
+2. Пользователь настраивает монитор: источник, checkpoint-колонку, cron-расписание, JSON метрик, JSON модели, static rules и уведомления.
 3. Ручной запуск или scheduler вызывает `execute_monitor`.
 4. Backend определяет текущий `MAX(checkpoint_column)` и строит агрегирующий SQL для новых строк:
 

@@ -43,8 +43,7 @@ class MonitorBase(BaseModel):
     connection_id: str
     schema_name: str
     table_name: str
-    schedule_type: str = "minutes"
-    schedule_value: str = "5"
+    schedule_cron: str = "*/5 * * * *"
     timezone: str = "UTC"
     checkpoint_column: str
     checkpoint_type: str = "timestamp"
@@ -65,8 +64,7 @@ class MonitorUpdate(BaseModel):
     connection_id: str | None = None
     schema_name: str | None = None
     table_name: str | None = None
-    schedule_type: str | None = None
-    schedule_value: str | None = None
+    schedule_cron: str | None = None
     timezone: str | None = None
     checkpoint_column: str | None = None
     checkpoint_type: str | None = None

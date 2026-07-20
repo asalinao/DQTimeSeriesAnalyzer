@@ -7,13 +7,13 @@
 - CRUD PostgreSQL-подключений и проверка подключения;
 - CRUD мониторов и удаление монитора с его рядами, запусками и аномалиями;
 - ручной запуск монитора;
-- scheduled-запуск активных мониторов через polling scheduler;
+- scheduled-запуск активных мониторов по cron-выражениям через polling scheduler;
 - auto-отбор новых строк по checkpoint;
 - JSON-настройки `selected_metrics`, `model_config`, `static_rules`, `notification_config`;
 - временные ряды, прогнозные значения, expected range и аномалии;
 - dashboard с последними запусками и критическими событиями;
 - webhook-уведомления;
-- Docker Compose для локального запуска и отдельной demo/source PostgreSQL.
+- Docker Compose для локального запуска.
 
 Исключено из текущего MVP:
 

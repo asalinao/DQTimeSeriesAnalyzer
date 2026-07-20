@@ -15,8 +15,7 @@ export type Monitor = {
   connection_id: string;
   schema_name: string;
   table_name: string;
-  schedule_type: string;
-  schedule_value: string;
+  schedule_cron: string;
   timezone: string;
   checkpoint_column: string;
   checkpoint_type: string;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, AlertTriangle, Database, LineChart, Play, Save, ShieldCheck, Trash2 } from "lucide-react";
 
 import { api, deleteJson, postJson, putJson } from "./api/client";
-import { emptyConnection, emptyMonitor, scheduleTypeLabels } from "./appConfig";
+import { emptyConnection, emptyMonitor } from "./appConfig";
 import { formatAnomalyDeviation, formatAnomalyRange, formatAnomalyValue, formatTableValue, mergePoints, monitorToForm, scheduleSummary } from "./appUtils";
 import { FormInput, JsonEditor, Metric, StatusPill, Table } from "./components";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -284,22 +284,12 @@ export function App() {
                     Запускать по расписанию
                   </label>
                   {monitorForm.is_active && (
-                    <>
-                      <label>
-                        Период
-                        <select value={monitorForm.schedule_type} onChange={(event) => setMonitorForm({ ...monitorForm, schedule_type: event.target.value })}>
-                          <option value="minutes">Минуты</option>
-                          <option value="hourly">Часы</option>
-                          <option value="daily">Дни</option>
-                        </select>
-                      </label>
-                      <FormInput
-                        label={`Каждые, ${scheduleTypeLabels[monitorForm.schedule_type] ?? "минут"}`}
-                        type="number"
-                        value={monitorForm.schedule_value}
-                        onChange={(schedule_value) => setMonitorForm({ ...monitorForm, schedule_value })}
-                      />
-                    </>
+                    <FormInput
+                      className="monitorSpan2"
+                      label="Cron"
+                      value={monitorForm.schedule_cron}
+                      onChange={(schedule_cron) => setMonitorForm({ ...monitorForm, schedule_cron })}
+                    />
                   )}
                   <FormInput label="Timezone" value={monitorForm.timezone} onChange={(timezone) => setMonitorForm({ ...monitorForm, timezone })} />
                   <FormInput

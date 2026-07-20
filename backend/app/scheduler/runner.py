@@ -1,27 +1,12 @@
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
 from app.db.session import SessionLocal, init_db
 from app.models import Monitor, Run
 from app.services.runner import execute_monitor
-
-
-def schedule_interval(monitor: Monitor) -> timedelta:
-    try:
-        value = int(monitor.schedule_value)
-    except ValueError:
-        value = 5
-    if monitor.schedule_type == "hourly":
-        return timedelta(hours=value)
-    if monitor.schedule_type == "daily":
-        return timedelta(days=value)
-    return timedelta(minutes=value)
-
-
-def as_utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+from app.services.scheduling import next_scheduled_at
 
 
 def latest_run_at(monitor_id: str) -> datetime | None:
@@ -32,10 +17,13 @@ def latest_run_at(monitor_id: str) -> datetime | None:
 def is_due(monitor: Monitor, now: datetime | None = None) -> bool:
     if not monitor.is_active:
         return False
+    current = now or datetime.now(timezone.utc)
     last_run = latest_run_at(monitor.id)
-    if last_run is None:
-        return True
-    return as_utc(last_run) + schedule_interval(monitor) <= (now or datetime.now(timezone.utc))
+    base = last_run or monitor.created_at
+    try:
+        return next_scheduled_at(monitor.schedule_cron, monitor.timezone, base) <= current
+    except ValueError:
+        return False
 
 
 def due_monitor_ids() -> list[str]:
