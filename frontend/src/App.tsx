@@ -34,11 +34,11 @@ export function App() {
     [anomalies],
   );
   const selectedSeriesEntity = series.find((row) => row.id === selectedSeries) ?? null;
-  const seriesEmptyTitle = !selectedMonitor ? "Выберите монитор" : series.length === 0 ? "Рядов пока нет" : "Выберите временной ряд";
+  const seriesEmptyTitle = !selectedMonitor ? "Выберите мониторинг" : series.length === 0 ? "Рядов пока нет" : "Выберите временной ряд";
   const seriesEmptyText = !selectedMonitor
     ? "Здесь появится график выбранного ряда."
     : series.length === 0
-      ? "Запустите монитор, чтобы получить первые метрики."
+      ? "Запустите мониторинг, чтобы получить первые метрики."
       : "График откроется после выбора ряда.";
 
   async function refresh() {
@@ -126,7 +126,7 @@ export function App() {
   }
 
   async function deleteMonitor(monitor: Monitor) {
-    if (!window.confirm(`Удалить монитор "${monitor.name}"?`)) {
+    if (!window.confirm(`Удалить мониторинг "${monitor.name}"?`)) {
       return;
     }
     await deleteJson<void>(`/monitors/${monitor.id}`);
@@ -167,13 +167,13 @@ export function App() {
           <strong>DQ Time Series</strong>
         </div>
         <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>
-          <Activity size={18} /> Dashboard
+          <Activity size={18} /> Дэшборд
         </button>
         <button className={tab === "connections" ? "active" : ""} onClick={() => setTab("connections")}>
           <Database size={18} /> Подключения
         </button>
         <button className={tab === "monitors" ? "active" : ""} onClick={() => setTab("monitors")}>
-          <Play size={18} /> Мониторы
+          <Play size={18} /> Мониторинги
         </button>
         <button className={tab === "series" ? "active" : ""} onClick={() => setTab("series")}>
           <LineChart size={18} /> Временные ряды
@@ -186,7 +186,7 @@ export function App() {
       <main>
         {tab === "dashboard" && dashboard && (
           <section className="dashboardGrid">
-            <Metric title="Активные мониторы" value={dashboard.active_monitors} />
+            <Metric title="Активные мониторинги" value={dashboard.active_monitors} />
             <Metric title="Запуски за 24 часа" value={dashboard.runs_24h} />
             <Metric title="Ошибки за 24 часа" value={dashboard.failed_runs_24h} />
             <Metric title="Открытые аномалии" value={dashboard.open_anomalies} />
@@ -334,16 +334,16 @@ export function App() {
                   <JsonEditor value={monitorForm.notification_config} onChange={(notification_config) => setMonitorForm({ ...monitorForm, notification_config: notification_config as Record<string, unknown> })} />
                 </label>
                 <div className="formActions monitorInlineActions">
-                  {editingMonitorId && <button onClick={startCreateMonitor}>Новый монитор</button>}
+                  {editingMonitorId && <button onClick={startCreateMonitor}>Новый мониторинг</button>}
                   <button onClick={saveMonitor}>
-                    <Save size={18} /> {editingMonitorId ? "Сохранить" : "Создать монитор"}
+                    <Save size={18} /> {editingMonitorId ? "Сохранить" : "Создать мониторинг"}
                   </button>
                 </div>
               </div>
             </div>
 
             <div className="panel monitorListPanel">
-              <h2>Мониторы</h2>
+              <h2>Мониторинги</h2>
               {monitors.map((monitor) => (
                 <div className="rowCard" key={monitor.id}>
                   <div>
@@ -367,9 +367,9 @@ export function App() {
           <section className="panel seriesPanel">
             <div className="toolbar seriesToolbar">
               <label className="seriesControl">
-                <span>Монитор</span>
+                <span>Мониторинг</span>
                 <select value={selectedMonitor} onChange={(event) => loadSeries(event.target.value)} disabled={monitors.length === 0}>
-                  <option value="">Выберите монитор</option>
+                  <option value="">Выберите мониторинг</option>
                   {monitors.map((monitor) => (
                     <option key={monitor.id} value={monitor.id}>{monitor.name}</option>
                   ))}
@@ -385,7 +385,7 @@ export function App() {
                     await loadSeriesPoints(event.target.value);
                   }}
                 >
-                  <option value="">{selectedMonitor ? "Выберите ряд" : "Сначала выберите монитор"}</option>
+                  <option value="">{selectedMonitor ? "Выберите ряд" : "Сначала выберите мониторинг"}</option>
                   {series.map((row) => (
                     <option key={row.id} value={row.id}>{row.display_name}</option>
                   ))}

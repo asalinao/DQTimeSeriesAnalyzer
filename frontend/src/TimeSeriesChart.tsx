@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { RotateCcw } from "lucide-react";
+import { useRef } from "react";
 import {
   Area,
   Brush,
@@ -58,6 +59,7 @@ export function TimeSeriesChart({
   const storageKey = series ? `dq.chart.range.${series.id}` : "";
   const [range, setRange] = useState<ChartRange | null>(null);
   const [pendingCommit, setPendingCommit] = useState<ChartRange | null>(null);
+  const initializedSeriesId = useRef<string | null>(null);
 
   const relevantAnomalies = useMemo(
     () => anomalies.filter((anomaly) => !series || anomaly.series_id === series.id),
@@ -67,12 +69,31 @@ export function TimeSeriesChart({
   const overviewRows = useMemo(() => buildChartRows(overviewPoints, relevantAnomalies), [overviewPoints, relevantAnomalies]);
 
   useEffect(() => {
-    if (!series || overviewPoints.length === 0) {
+    if (!series) {
+      initializedSeriesId.current = null;
       setRange(null);
       return;
     }
-    sessionStorage.removeItem(storageKey);
-    setRange(chooseInitialRange(overviewPoints));
+    if (overviewPoints.length === 0) {
+      if (initializedSeriesId.current !== series.id) {
+        initializedSeriesId.current = series.id;
+        setRange(null);
+      }
+      return;
+    }
+
+    const initialRange = chooseInitialRange(overviewPoints);
+    setRange((currentRange) => {
+      if (initializedSeriesId.current !== series.id) {
+        initializedSeriesId.current = series.id;
+        sessionStorage.removeItem(storageKey);
+        return initialRange;
+      }
+      if (!currentRange || currentRange.preset === "all") {
+        return initialRange;
+      }
+      return currentRange;
+    });
   }, [overviewPoints, series, storageKey]);
 
   useEffect(() => {

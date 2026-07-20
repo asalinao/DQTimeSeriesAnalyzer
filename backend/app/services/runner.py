@@ -15,7 +15,7 @@ from app.notifications.webhook import create_notification, send_webhook
 from app.services import source_postgres
 from app.services.monitors import get_monitor
 from app.services.sql_safety import MetricSpec, build_aggregate_sql, parse_checkpoint
-from app.timeseries.models import Forecast, compare, forecast_next
+from app.timeseries.models import Evaluation, Forecast, evaluate_next, forecast_next
 
 
 def execute_monitor(db: Session, monitor_id: str, existing_run_id: str | None = None) -> Run:
@@ -97,9 +97,8 @@ def _store_points(
         if _point_exists(db, series.id, run.id):
             continue
         actual = to_float(metrics.get(spec.alias))
-        forecast = forecast_for_series(db, series, monitor)
         rules = rules_for_series(monitor, series, spec)
-        is_anomaly, _reason, severity, absolute, relative = compare(actual, forecast, rules)
+        evaluation = evaluate_for_series(db, series, monitor, actual, rules)
         point = SeriesPoint(
             series_id=series.id,
             run_id=run.id,
@@ -107,21 +106,21 @@ def _store_points(
             interval_start=run.interval_start,
             interval_end=run.interval_end,
             actual_value=actual,
-            predicted_value=forecast.predicted,
-            lower_bound=forecast.lower,
-            upper_bound=forecast.upper,
-            is_anomaly=is_anomaly,
-            deviation_score=relative,
-            model_version=forecast.model_version,
-            model_details=forecast.details,
+            predicted_value=evaluation.predicted,
+            lower_bound=evaluation.lower,
+            upper_bound=evaluation.upper,
+            is_anomaly=evaluation.is_anomaly,
+            deviation_score=evaluation.deviation_score,
+            model_version=evaluation.model_version,
+            model_details=evaluation.details,
         )
         db.add(point)
         db.flush()
         created += 1
         if spec.column_name == "__table__" and spec.metric_name == "row_count":
             run.new_rows = int(actual or 0)
-        if is_anomaly:
-            create_anomaly(db, monitor, series, point, actual, forecast, absolute, relative, severity)
+        if evaluation.is_anomaly:
+            create_anomaly(db, monitor, series, point, actual, evaluation)
     return created
 
 
@@ -131,23 +130,20 @@ def create_anomaly(
     series: Series,
     point: SeriesPoint,
     actual: float | None,
-    forecast: Forecast,
-    absolute: float | None,
-    relative: float | None,
-    severity: str,
+    evaluation: Evaluation,
 ) -> None:
     anomaly = Anomaly(
         series_id=series.id,
         run_id=point.run_id,
         point_id=point.id,
         actual_value=actual,
-        predicted_value=forecast.predicted,
-        lower_bound=forecast.lower,
-        upper_bound=forecast.upper,
-        absolute_deviation=absolute,
-        relative_deviation=relative,
-        severity=severity,
-        reason=f"{monitor.schema_name}.{monitor.table_name}, {series.column_name}, {series.metric_name}",
+        predicted_value=evaluation.predicted,
+        lower_bound=evaluation.lower,
+        upper_bound=evaluation.upper,
+        absolute_deviation=evaluation.absolute_deviation,
+        relative_deviation=evaluation.relative_deviation,
+        severity=evaluation.severity,
+        reason=f"{monitor.schema_name}.{monitor.table_name}, {series.column_name}, {series.metric_name}, {evaluation.reason}",
     )
     db.add(anomaly)
     db.flush()
@@ -202,12 +198,34 @@ def get_or_create_series(db: Session, monitor: Monitor, spec: MetricSpec) -> Ser
 
 
 def forecast_for_series(db: Session, series: Series, monitor: Monitor) -> Forecast:
-    window = max(get_settings().min_series_points, int((monitor.model_config or {}).get("window", 30)))
+    config = monitor.model_config if monitor.model_config is not None else series.model_config or {}
+    window = max(get_settings().min_series_points, int((config or {}).get("window", 30)))
     points = db.scalars(
         select(SeriesPoint).where(SeriesPoint.series_id == series.id).order_by(SeriesPoint.timestamp.desc()).limit(window * 2)
     ).all()
-    history = [point.actual_value for point in reversed(points)]
-    return forecast_next(history, series.model_config or monitor.model_config or {}, get_settings().min_series_points)
+    history = cleaned_history(points)
+    return forecast_next(history, config or {}, get_settings().min_series_points)
+
+
+def evaluate_for_series(db: Session, series: Series, monitor: Monitor, actual: float | None, rules: dict | None = None) -> Evaluation:
+    config = monitor.model_config if monitor.model_config is not None else series.model_config or {}
+    window = max(get_settings().min_series_points, int((config or {}).get("window", 30)))
+    points = db.scalars(
+        select(SeriesPoint).where(SeriesPoint.series_id == series.id).order_by(SeriesPoint.timestamp.desc()).limit(window * 2)
+    ).all()
+    history = cleaned_history(points)
+    return evaluate_next(history, actual, config or {}, get_settings().min_series_points, rules)
+
+
+def cleaned_history(points: list[SeriesPoint]) -> list[float | None]:
+    ordered = list(reversed(points))
+    history: list[float | None] = []
+    for point in ordered:
+        if point.is_anomaly and point.predicted_value is not None:
+            history.append(point.predicted_value)
+        else:
+            history.append(point.actual_value)
+    return history
 
 
 def rules_for_series(monitor: Monitor, series: Series, spec: MetricSpec) -> dict:

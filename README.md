@@ -114,10 +114,24 @@ docker compose run --rm demo-scenario --reset-source --history-days 45 --normal-
 | `checkpoint_type` | `timestamp`, `date`, `integer`, `bigint`. Сейчас используется как описание типа checkpoint. |
 | `selected_metrics.__table__` | `row_count`, `empty_batch`. `row_count` всегда добавляется, если его забыли указать. |
 | Метрики колонок | `min`, `max`, `avg`, `sum`, `stddev`, `null_ratio`, `distinct_count`, `unique_ratio`, `zero_ratio`, `negative_ratio`, `empty_ratio`, `avg_length`. |
-| `model_config.model` | `rolling`, `robust_z`, `exp_smoothing`, `seasonal_naive`. По умолчанию используется `rolling`. |
+| `model_config.model` | `rolling`, `robust_z`, `exp_smoothing`, `seasonal_naive`, `quantile_boosting`, `random_forest`, `isolation_forest`. По умолчанию используется `rolling`. |
 | `static_rules` | Ключом может быть имя ряда (`amount.avg`) или имя метрики (`row_count`). Поддержаны `min_value`, `max_value`, `forbid_null`. |
 | `notification_config` | `{}` для UI-only или `{"webhook_url": "https://example.com/hook"}`. Локальные и приватные webhook URL блокируются. |
 | `is_active` | `true` включает автоматический polling scheduler, ручной запуск работает всегда. |
+
+Примеры новых `model_config`:
+
+```json
+{ "model": "quantile_boosting", "window": 120, "lags": 12, "lower_quantile": 0.05, "upper_quantile": 0.95, "n_estimators": 100, "learning_rate": 0.05, "max_depth": 3 }
+```
+
+```json
+{ "model": "random_forest", "window": 120, "lags": 12, "lower_quantile": 0.05, "upper_quantile": 0.95, "n_estimators": 200, "min_samples_leaf": 2 }
+```
+
+```json
+{ "model": "isolation_forest", "window": 120, "lags": 12, "contamination": 0.03, "n_estimators": 100 }
+```
 
 ## Актуальный API
 
