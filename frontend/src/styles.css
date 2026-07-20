@@ -800,17 +800,17 @@ textarea {
 }
 
 .anomalyValues {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 8px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 34px;
+  align-items: flex-start;
 }
 
 .anomalyValue {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  min-width: 74px;
+  max-width: 180px;
+  display: grid;
+  gap: 6px;
 }
 
 .anomalyValue span {
@@ -820,9 +820,9 @@ textarea {
 
 .anomalyValue strong {
   overflow-wrap: anywhere;
-  text-align: right;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 700;
 }
 
 .anomalyValue.danger strong {
@@ -874,7 +874,7 @@ textarea {
   }
 
   .anomalyValues {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 24px;
   }
 }
 
@@ -897,6 +897,6 @@ textarea {
   }
 
   .anomalyValues {
-    grid-template-columns: 1fr;
+    gap: 14px 22px;
   }
 }
